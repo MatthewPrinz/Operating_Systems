@@ -5,20 +5,50 @@
 #include <sys/wait.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+/**
+ * Data structures I need to create:
+ * job array?
+ * process list?
+ * Pretty obvious commands I need to use -
+ * fork
+ * exec
+ * wait
+ * signal
+ * pipe
+ * dup2
+ * open
+ * creat
+ * write
+ * read
+ * setpgid
+ * getpgid
+ * tcsetpgrp
+ * tcgetpgrp
+ * signal
+ * kill - both positive & negative, positive for processes, negative for ctrl c & ctrl z
+ *
+ */
 
 int S_STRINGS_LENGTH = 6;
+// max num jobs <= 20
+// & always at the end
+int numJobs = 0;
+
 char **tokenizedCommand;
 // ORDER MATTERS - WE SWITCH BASED OFF OF INDEX POSITION
 char *specialStrings[6] = {"|", ">", "<", ">>", "2>", "&"};
+void parseString(char *str); //parses an command into strings
 void piping();
-void redirectOutput();
+void redirectOutput(int tokenIndex);
 void redirectInput();
 void appendToFile();
 void redirectError();
 void JOBCONTROL(); // name to change
-char **parseString(char *str); //parses an command into strings
 
-char **parseString(char *str) {
+void parseString(char *str) {
     char *token = strtok(str, " ");
     int tokens = 5;
     int charInToken = 5;
@@ -33,45 +63,62 @@ char **parseString(char *str) {
         token = strtok(NULL, " ");
     }
     tokenizedCommand[numTokens] = (char *) NULL;
-    for (int i = 0; i < S_STRINGS_LENGTH; i++)
+    for (int sStringsIndex = 0; sStringsIndex < S_STRINGS_LENGTH; sStringsIndex++)
     {
-        for (int j = 0; j < numTokens; j++)
+        for (int tokenIndex = 0; tokenIndex < numTokens; tokenIndex++)
         {
-            if (strcmp(specialStrings[i], tokenizedCommand[j]) == 0)
+            if (strcmp(specialStrings[sStringsIndex], tokenizedCommand[tokenIndex]) == 0)
             {
-                switch(i)
+                switch(sStringsIndex)
                 {
+                    // "|"
+                    case 0:
+                        break;
                     // ">"
                     case 1:
-                        redirectOutput();
+                        redirectOutput(tokenIndex);
                         break;
+                    // "<"
                     case 2:
-
-
+                        break;
+                    // ">>"
+                    case 3:
+                        break;
+                    // "2>"
+                    case 4:
+                        break;
+                    // "&"
+                    case 5:
+                        break;
                 }
             }
         }
     }
-    return tokenizedCommand;
+}
+/**
+ * For dealing with ">"
+ * @param tokenIndex
+ */
+void redirectOutput(int tokenIndex)
+{
+    // tokenIndex + 1 => file name
+    open(tokenizedCommand[tokenIndex + 1], O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH);
+
 }
 
-/* exec Example 2 */
 int main() {
     int cpid;
-    char **parsedcmd;
     char *inString;
-    while (inString = readline("# ")) {
-        parsedcmd = parseString(inString);
+    while (1) {
+        inString = readline("# ");
+        printf("instring: %s", inString);
+        parseString(inString);
         cpid = fork();
         if (cpid == 0) {
-            execvp(parsedcmd[0], parsedcmd);
+            execvp(tokenizedCommand[0], tokenizedCommand);
         } else {
             free(inString);
             wait((int *) NULL);
         }
     }
 }
-
-
-
-// parseString function omitted (read the man page for strtok)

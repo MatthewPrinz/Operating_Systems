@@ -21,4 +21,10 @@ stdlib.h
 -
 string.h
 -
+sys/types.h
+-
+sys/stat.h
+-
+fcntl.h
+-
 
