@@ -8,6 +8,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <stdbool.h>
+
 /**
  * Data structures I need to create:
  * job array?
@@ -37,93 +39,186 @@ int S_STRINGS_LENGTH = 6;
 // & always at the end
 int numJobs = 0;
 
-
+typedef struct Commands {
+    char *command;
+    char *fexec[2000];
+    char *flags[2000];
+    int numFlags;
+    bool hasInRedirect;
+    char *inRedirectFileName;
+    bool hasOutRedirect;
+    char *outRedirectFileName;
+    bool hasErrorRedirect;
+    char *errorRedirectFileName;
+    pid_t pid;
+} command_t;
+command_t input[2];
+int commandIndex;
+int numCommands = 1;
 // will be the pid
 pid_t currentProcess;
 
-char *tokenizedCommand[2000];
-// ORDER MATTERS - WE SWITCH BASED OFF OF INDEX POSITION
-char *specialStrings[6] = {"|", ">", "<", ">>", "2>", "&"};
 void parseString(char *str); //parses an command into strings
 void stopHandler(int signum);
+
 void intHandler(int signum);
+
+
 void piping();
-void redirectOutput(int tokenIndex);
+
+int redirectOutput();
+
 void redirectInput();
+
 void appendToFile();
+
 void redirectError();
+
 void JOBCONTROL(); // name to change
 
-void parseString(char *str)
-{
+
+
+void parseString(char *str) {
+    char *tokenizedCommand[2000];
+    input[0].numFlags = 0;
+    int cmdIndex = 0;
+    int numTokens = 0;
     char *cl_copy, *token, *save_ptr;
     cl_copy = strdup(str);
-	int numTokens = 0;
-	while ((token = strtok_r(cl_copy, " ", &save_ptr))) {
+    bool cmdHasPipe = false;
+    int inRedirectIndex, outRedirectIndex, errorRedirectIndex;
+    int flagIndex = 0;
+    while ((token = strtok_r(cl_copy, " ", &save_ptr))) {
         tokenizedCommand[numTokens] = token;
-    	numTokens++;
-    	/* First argument to strtok_r must be NULL after the first iteration. */
-    	cl_copy = NULL;
-	}
-	tokenizedCommand[numTokens] = (char*)NULL;
-}
-
-/*void parseString(char *str) {
-    char *token = strtok_r(str, " ");
-    int tokens = 2000;
-    int charInToken = 30;
-    tokenizedCommand = (char **) malloc(sizeof(char *) * tokens);
-    for (int i = 0; i < tokens; i++) {
-        tokenizedCommand[i] = (char *) malloc(sizeof(char) * charInToken);
-    }
-    int numTokens = 0;
-    while (token != NULL) {
-        tokenizedCommand[numTokens] = token;
+        if (numTokens == 0 || cmdHasPipe) {
+            input[cmdIndex].command = strdup(token);
+            cmdHasPipe = false;
+        }
+        if (strcmp(token, ">") == 0) {
+            input[cmdIndex].hasOutRedirect = true;
+            outRedirectIndex = numTokens + 1;
+        }
+        if (strcmp(token, "<") == 0) {
+            input[cmdIndex].hasInRedirect = true;
+            inRedirectIndex = numTokens + 1;
+        }
+        if (strcmp(token, "2>") == 0) {
+            input[cmdIndex].hasErrorRedirect = true;
+            errorRedirectIndex = numTokens + 1;
+        }
+        if (token[0] == '-') {
+            input[cmdIndex].flags[flagIndex] = strdup(token);
+            input[cmdIndex].numFlags++;
+            flagIndex++;
+        }
+        if (strcmp(token, "|") == 0) {
+            cmdIndex++;
+            cmdHasPipe = true;
+            numCommands++;
+            flagIndex = 0;
+            input[cmdIndex].numFlags = 0;
+        }
         numTokens++;
-        token = strtok(NULL, " ");
+        cl_copy = NULL;
+    }
+    for (int i = 0; i < numCommands; i++) {
+        if (input[i].hasOutRedirect) {
+            input[i].outRedirectFileName = strdup(tokenizedCommand[outRedirectIndex]);
+        }
+        if (input[i].hasInRedirect) {
+            input[i].inRedirectFileName = strdup(tokenizedCommand[inRedirectIndex]);
+        }
+        if (input[i].hasErrorRedirect) {
+            input[i].errorRedirectFileName = strdup(tokenizedCommand[errorRedirectIndex]);
+        }
+        input[i].fexec[0] = input[i].command;
+        int j;
+        for (j = 1; j < input[i].numFlags+1; j++)
+        {
+            input[i].fexec[j] = input[i].flags[j-1];
+        }
+        input[i].fexec[j+1] = (char*) NULL;
     }
     tokenizedCommand[numTokens] = (char *) NULL;
-
 }
- */
 /**
  * For dealing with ">"
  * @param tokenIndex
  */
-void redirectOutput(int tokenIndex)
-{
+int redirectOutput() {
     // tokenIndex + 1 => file name
 //    open(tokenizedCommand[tokenIndex + 1], O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH);
-    int fd = creat(tokenizedCommand[tokenIndex + 1], 0644);
+    int fd = creat(input[commandIndex].outRedirectFileName, 0644);
     dup2(fd, 1);
+    return fd;
 }
 
-void intHandler(int signum)
-{
+void intHandler(int signum) {
     kill(SIGKILL, currentProcess);
     printf("Received int signal");
 }
 
-void stopHandler(int signum)
-{
+void stopHandler(int signum) {
     kill(SIGSTOP, currentProcess);
     printf("Received stop signal");
 }
 
 int main() {
     char *inString;
-
+    int fd;
     while (1) {
         signal(SIGINT, intHandler);
         signal(SIGSTOP, stopHandler);
         inString = readline("# ");
         parseString(inString);
         currentProcess = fork();
+        if (input[commandIndex].hasOutRedirect)
+        {
+            fd = redirectOutput();
+        }
         if (currentProcess == 0) {
-            execvp(tokenizedCommand[0], tokenizedCommand);
+            execvp(input[commandIndex].command, input[commandIndex].fexec);
+            if (input[commandIndex].hasOutRedirect)
+            {
+                dup2(1, fd);
+            }
         } else {
             wait((int *) NULL);
             free(inString);
         }
     }
 }
+
+/*
+ *         for (int sStringsIndex = 0; sStringsIndex < S_STRINGS_LENGTH; sStringsIndex++)
+        {
+            for (int tokenIndex = 0; tokenIndex < numTokens; tokenIndex++)
+            {
+                if (strcmp(specialStrings[sStringsIndex], tokenizedCommand[tokenIndex]) == 0)
+                {
+                    switch(sStringsIndex)
+                    {
+                        // "|"
+                        case 0:
+                            break;
+                        // ">"
+                        case 1:
+                            redirectOutput(tokenIndex);
+                            break;
+                        // "<"
+                        case 2:
+                            break;
+                        // ">>"
+                        case 3:
+                            break;
+                        // "2>"
+                        case 4:
+                            break;
+                        // "&"
+                        case 5:
+                            break;
+                    }
+                }
+            }
+    }
+ */
