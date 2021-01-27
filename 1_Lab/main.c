@@ -66,38 +66,6 @@ void parseString(char *str)
     	cl_copy = NULL;
 	}
 	tokenizedCommand[numTokens] = (char*)NULL;
-    for (int sStringsIndex = 0; sStringsIndex < S_STRINGS_LENGTH; sStringsIndex++)
-    {
-        for (int tokenIndex = 0; tokenIndex < numTokens; tokenIndex++)
-        {
-            if (strcmp(specialStrings[sStringsIndex], tokenizedCommand[tokenIndex]) == 0)
-            {
-                switch(sStringsIndex)
-                {
-                    // "|"
-                    case 0:
-                        break;
-                    // ">"
-                    case 1:
-                        redirectOutput(tokenIndex);
-                        break;
-                    // "<"
-                    case 2:
-                        break;
-                    // ">>"
-                    case 3:
-                        break;
-                    // "2>"
-                    case 4:
-                        break;
-                    // "&"
-                    case 5:
-                        break;
-                }
-            }
-        }
-    }
-
 }
 
 /*void parseString(char *str) {
