@@ -37,10 +37,16 @@ int S_STRINGS_LENGTH = 6;
 // & always at the end
 int numJobs = 0;
 
-char **tokenizedCommand;
+
+// will be the pid
+pid_t currentProcess;
+
+char *tokenizedCommand[2000];
 // ORDER MATTERS - WE SWITCH BASED OFF OF INDEX POSITION
 char *specialStrings[6] = {"|", ">", "<", ">>", "2>", "&"};
 void parseString(char *str); //parses an command into strings
+void stopHandler(int signum);
+void intHandler(int signum);
 void piping();
 void redirectOutput(int tokenIndex);
 void redirectInput();
@@ -48,21 +54,18 @@ void appendToFile();
 void redirectError();
 void JOBCONTROL(); // name to change
 
-void parseString(char *str) {
-    char *token = strtok(str, " ");
-    int tokens = 5;
-    int charInToken = 5;
-    tokenizedCommand = (char **) malloc(sizeof(char *) * tokens);
-    for (int i = 0; i < tokens; i++) {
-        tokenizedCommand[i] = (char *) malloc(sizeof(char) * charInToken);
-    }
-    int numTokens = 0;
-    while (token != NULL) {
+void parseString(char *str)
+{
+    char *cl_copy, *token, *save_ptr;
+    cl_copy = strdup(str);
+	int numTokens = 0;
+	while ((token = strtok_r(cl_copy, " ", &save_ptr))) {
         tokenizedCommand[numTokens] = token;
-        numTokens++;
-        token = strtok(NULL, " ");
-    }
-    tokenizedCommand[numTokens] = (char *) NULL;
+    	numTokens++;
+    	/* First argument to strtok_r must be NULL after the first iteration. */
+    	cl_copy = NULL;
+	}
+	tokenizedCommand[numTokens] = (char*)NULL;
     for (int sStringsIndex = 0; sStringsIndex < S_STRINGS_LENGTH; sStringsIndex++)
     {
         for (int tokenIndex = 0; tokenIndex < numTokens; tokenIndex++)
@@ -94,7 +97,27 @@ void parseString(char *str) {
             }
         }
     }
+
 }
+
+/*void parseString(char *str) {
+    char *token = strtok_r(str, " ");
+    int tokens = 2000;
+    int charInToken = 30;
+    tokenizedCommand = (char **) malloc(sizeof(char *) * tokens);
+    for (int i = 0; i < tokens; i++) {
+        tokenizedCommand[i] = (char *) malloc(sizeof(char) * charInToken);
+    }
+    int numTokens = 0;
+    while (token != NULL) {
+        tokenizedCommand[numTokens] = token;
+        numTokens++;
+        token = strtok(NULL, " ");
+    }
+    tokenizedCommand[numTokens] = (char *) NULL;
+
+}
+ */
 /**
  * For dealing with ">"
  * @param tokenIndex
@@ -102,23 +125,37 @@ void parseString(char *str) {
 void redirectOutput(int tokenIndex)
 {
     // tokenIndex + 1 => file name
-    open(tokenizedCommand[tokenIndex + 1], O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH);
+//    open(tokenizedCommand[tokenIndex + 1], O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH);
+    int fd = creat(tokenizedCommand[tokenIndex + 1], 0644);
+    dup2(fd, 1);
+}
 
+void intHandler(int signum)
+{
+    kill(SIGKILL, currentProcess);
+    printf("Received int signal");
+}
+
+void stopHandler(int signum)
+{
+    kill(SIGSTOP, currentProcess);
+    printf("Received stop signal");
 }
 
 int main() {
-    int cpid;
     char *inString;
+
     while (1) {
+        signal(SIGINT, intHandler);
+        signal(SIGSTOP, stopHandler);
         inString = readline("# ");
-        printf("instring: %s", inString);
         parseString(inString);
-        cpid = fork();
-        if (cpid == 0) {
+        currentProcess = fork();
+        if (currentProcess == 0) {
             execvp(tokenizedCommand[0], tokenizedCommand);
         } else {
-            free(inString);
             wait((int *) NULL);
+            free(inString);
         }
     }
 }
