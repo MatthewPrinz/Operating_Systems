@@ -144,13 +144,24 @@ void parseString(char *str) {
 }
 /**
  * For dealing with ">"
- * @param tokenIndex
  */
 void redirectOutput() {
-    // tokenIndex + 1 => file name
-//    open(tokenizedCommand[tokenIndex + 1], O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH);
     int fd = creat(input[commandIndex].outRedirectFileName, 0644);
-    dup2(fd, 1);
+    dup2(fd, STDOUT_FILENO);
+}
+/**
+ * For dealing with "<"
+ */
+void redirectInput()
+{
+    int fd = open(input[commandIndex].inRedirectFileName, O_RDONLY);
+    dup2(fd, STDIN_FILENO);
+}
+
+void redirectError()
+{
+    int fd = open(input[commandIndex].inRedirectFileName, O_RDONLY);
+    dup2(fd, STDERR_FILENO);
 }
 
 void intHandler(int signum) {
@@ -165,6 +176,7 @@ void stopHandler(int signum) {
 
 int main() {
     char *inString;
+    int fd;
     while (1) {
         signal(SIGINT, intHandler);
         signal(SIGSTOP, stopHandler);
@@ -173,16 +185,16 @@ int main() {
             break;
         parseString(inString);
         currentProcess = fork();
-        if (input[commandIndex].hasOutRedirect)
-        {
-            redirectOutput();
-        }
+
         if (currentProcess == 0) {
-            execvp(input[commandIndex].command, input[commandIndex].fexec);
-            if (input[commandIndex].hasOutRedirect)
+            if (input[commandIndex].hasInRedirect)
             {
-                dup2(STDOUT_FILENO, STDOUT_FILENO);
+                redirectInput();
             }
+            if (input[commandIndex].hasOutRedirect) {
+                redirectOutput();
+            }
+            execvp(input[commandIndex].command, input[commandIndex].fexec);
         } else {
             wait((int *) NULL);
             free(inString);
