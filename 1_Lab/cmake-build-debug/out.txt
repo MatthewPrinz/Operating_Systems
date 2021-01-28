@@ -1,1 +1,12 @@
-# 
+# tal 88K
+drwxrwxr-x 4 matt matt 4.0K Jan 27 16:56 .
+drwxrwxr-x 4 matt matt 4.0K Jan 27 16:56 ..
+-rwxrwxr-x 1 matt matt  28K Jan 27 16:56 1_Lab
+-rw-rw-r-- 1 matt matt 5.4K Jan 27 16:42 1_Lab.cbp
+-rw-rw-r-- 1 matt matt  23K Jan 27 16:42 CMakeCache.txt
+drwxrwxr-x 5 matt matt 4.0K Jan 27 16:56 CMakeFiles
+-rw-rw-r-- 1 matt matt 1.6K Jan 23 00:02 cmake_install.cmake
+-rw-rw-r-- 1 matt matt 5.3K Jan 27 16:42 Makefile
+-rw-r--r-- 1 matt matt    0 Jan 27 16:56 out.txt
+drwxrwxr-x 3 matt matt 4.0K Jan 23 00:02 Testing
+-rw-rw-r-- 1 matt matt    0 Jan 27 00:45 test.txt

@@ -52,6 +52,7 @@ typedef struct Commands {
     char *errorRedirectFileName;
     pid_t pid;
 } command_t;
+
 command_t input[2];
 int commandIndex;
 int numCommands = 1;
@@ -66,7 +67,7 @@ void intHandler(int signum);
 
 void piping();
 
-int redirectOutput();
+void redirectOutput();
 
 void redirectInput();
 
@@ -145,16 +146,15 @@ void parseString(char *str) {
  * For dealing with ">"
  * @param tokenIndex
  */
-int redirectOutput() {
+void redirectOutput() {
     // tokenIndex + 1 => file name
 //    open(tokenizedCommand[tokenIndex + 1], O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH);
     int fd = creat(input[commandIndex].outRedirectFileName, 0644);
     dup2(fd, 1);
-    return fd;
 }
 
 void intHandler(int signum) {
-    kill(SIGKILL, currentProcess);
+    kill(SIGINT, currentProcess);
     printf("Received int signal");
 }
 
@@ -165,22 +165,23 @@ void stopHandler(int signum) {
 
 int main() {
     char *inString;
-    int fd;
     while (1) {
         signal(SIGINT, intHandler);
         signal(SIGSTOP, stopHandler);
         inString = readline("# ");
+        if (inString == NULL)
+            break;
         parseString(inString);
         currentProcess = fork();
         if (input[commandIndex].hasOutRedirect)
         {
-            fd = redirectOutput();
+            redirectOutput();
         }
         if (currentProcess == 0) {
             execvp(input[commandIndex].command, input[commandIndex].fexec);
             if (input[commandIndex].hasOutRedirect)
             {
-                dup2(1, fd);
+                dup2(STDOUT_FILENO, STDOUT_FILENO);
             }
         } else {
             wait((int *) NULL);
@@ -188,37 +189,3 @@ int main() {
         }
     }
 }
-
-/*
- *         for (int sStringsIndex = 0; sStringsIndex < S_STRINGS_LENGTH; sStringsIndex++)
-        {
-            for (int tokenIndex = 0; tokenIndex < numTokens; tokenIndex++)
-            {
-                if (strcmp(specialStrings[sStringsIndex], tokenizedCommand[tokenIndex]) == 0)
-                {
-                    switch(sStringsIndex)
-                    {
-                        // "|"
-                        case 0:
-                            break;
-                        // ">"
-                        case 1:
-                            redirectOutput(tokenIndex);
-                            break;
-                        // "<"
-                        case 2:
-                            break;
-                        // ">>"
-                        case 3:
-                            break;
-                        // "2>"
-                        case 4:
-                            break;
-                        // "&"
-                        case 5:
-                            break;
-                    }
-                }
-            }
-    }
- */

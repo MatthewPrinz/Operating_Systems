@@ -1,0 +1,12 @@
+total 84K
+drwxrwxr-x 4 matt matt 4.0K Jan 27 02:17 .
+drwxrwxr-x 7 matt matt 4.0K Jan 27 02:06 ..
+drwxrwxr-x 4 matt matt 4.0K Jan 27 01:57 cmake-build-debug
+-rw-rw-r-- 1 matt matt  180 Jan 23 00:10 CMakeLists.txt
+drwxrwxr-x 3 matt matt 4.0K Jan 27 02:16 .idea
+-rwxrwxr-x 1 matt matt  27K Jan 27 02:14 main
+-rw-rw-r-- 1 matt matt 5.7K Jan 27 01:57 main.c
+-rw-r--r-- 1 matt matt    0 Jan 27 02:17 out.txt
+-rw-rw-r-- 1 matt matt  337 Jan 26 21:41 test.c
+-rwxrwxr-x 1 matt matt  17K Jan 26 21:43 while
+-rw-rw-r-- 1 matt matt   25 Jan 26 21:42 while.c
