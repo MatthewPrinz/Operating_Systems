@@ -34,7 +34,6 @@
  *
  */
 
-int S_STRINGS_LENGTH = 6;
 // max num jobs <= 20
 // & always at the end
 int numJobs = 0;
@@ -71,12 +70,9 @@ void redirectOutput();
 
 void redirectInput();
 
-void appendToFile();
-
 void redirectError();
 
 void JOBCONTROL(); // name to change
-
 
 
 void parseString(char *str) {
@@ -141,6 +137,7 @@ void parseString(char *str) {
         input[i].fexec[j+1] = (char*) NULL;
     }
     tokenizedCommand[numTokens] = (char *) NULL;
+    free(str);
 }
 /**
  * For dealing with ">"
@@ -160,7 +157,7 @@ void redirectInput()
 
 void redirectError()
 {
-    int fd = open(input[commandIndex].inRedirectFileName, O_RDONLY);
+    int fd = creat(input[commandIndex].errorRedirectFileName, 0644);
     dup2(fd, STDERR_FILENO);
 }
 
@@ -170,13 +167,12 @@ void intHandler(int signum) {
 }
 
 void stopHandler(int signum) {
-    kill(SIGSTOP, currentProcess);
+    kill(SIGTSTP, currentProcess);
     printf("Received stop signal");
 }
 
 int main() {
     char *inString;
-    int fd;
     while (1) {
         signal(SIGINT, intHandler);
         signal(SIGSTOP, stopHandler);
@@ -194,10 +190,34 @@ int main() {
             if (input[commandIndex].hasOutRedirect) {
                 redirectOutput();
             }
+            if (input[commandIndex].hasErrorRedirect)
+            {
+                redirectError();
+            }
             execvp(input[commandIndex].command, input[commandIndex].fexec);
         } else {
             wait((int *) NULL);
-            free(inString);
+            for (int i = 0; i < numCommands; i++)
+            {
+                free(input[i].command);
+                if (input[i].numFlags > 0) {
+                    for (int j = 0; j < input[i].numFlags; j++) {
+                        free(input[i].flags[j]);
+                    }
+                }
+                if (input[i].hasInRedirect) {
+                    free(input[i].inRedirectFileName);
+                    input[i].hasInRedirect = false;
+                }
+                if (input[i].hasOutRedirect) {
+                    free(input[i].outRedirectFileName);
+                    input[i].hasOutRedirect = false;
+                }
+                if (input[i].hasErrorRedirect) {
+                    free(input[i].errorRedirectFileName);
+                    input[i].hasErrorRedirect = false;
+                }
+            }
         }
     }
 }
