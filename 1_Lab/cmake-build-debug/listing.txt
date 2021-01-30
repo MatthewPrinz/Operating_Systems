@@ -1,0 +1,15 @@
+1_Lab
+1_Lab.cbp
+CMakeCache.txt
+CMakeFiles
+cmake_install.cmake
+copyError.txt
+error.txt
+listing.txt
+Makefile
+noError.txt
+Testing
+testOutput.txt
+today.txt
+while
+while.c
