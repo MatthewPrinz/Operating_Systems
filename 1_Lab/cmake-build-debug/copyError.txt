@@ -1,3 +1,0 @@
-ls: invalid option -- 'z'
-Try 'ls --help' for more information.
-cat: copyError.txt: input file is output file

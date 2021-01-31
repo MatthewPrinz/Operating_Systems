@@ -1,1 +1,0 @@
-cat: copyError.txt: input file is output file

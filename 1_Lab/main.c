@@ -49,10 +49,13 @@ typedef struct Commands {
     char *outRedirectFileName;
     bool hasErrorRedirect;
     char *errorRedirectFileName;
+    bool hasPipe;
     pid_t pid;
 } command_t;
 
+// Has all the related to commands in one simple struct
 command_t input[2];
+
 int commandIndex;
 int numCommands = 1;
 // will be the pid
@@ -62,7 +65,6 @@ void parseString(char *str); //parses an command into strings
 void stopHandler(int signum);
 
 void intHandler(int signum);
-
 
 void piping();
 
@@ -74,71 +76,61 @@ void redirectError();
 
 void JOBCONTROL(); // name to change
 
-
 void parseString(char *str) {
     char *tokenizedCommand[2000];
+    // Need to initialize numArgs for my struct
     input[0].numArgs = 0;
     int cmdIndex = 0;
     int numTokens = 0;
     char *cl_copy, *token, *save_ptr;
     cl_copy = strdup(str);
-    bool cmdHasPipe = false;
+
+    // Used to note that the next token to be analyzed will be an actual command that can be
+    // ran by the shell.
+    bool recognizeCommand = true;
+    // Used to show the location of the file name in tokenizedCommand
     int inRedirectIndex, outRedirectIndex, errorRedirectIndex;
-    int flagIndex = 0;
+    int argvIndex = 0;
+
     while ((token = strtok_r(cl_copy, " ", &save_ptr))) {
         tokenizedCommand[numTokens] = token;
-        if (numTokens == 0 || cmdHasPipe) {
+        if (recognizeCommand) {
             input[cmdIndex].command = strdup(token);
-            cmdHasPipe = false;
-            numTokens++;
-            cl_copy = NULL;
-            continue;
+            recognizeCommand = false;
         }
-        if (strcmp(token, ">") == 0) {
+        else if (strcmp(token, ">") == 0) {
             input[cmdIndex].hasOutRedirect = true;
             outRedirectIndex = numTokens + 1;
-            numTokens++;
-            cl_copy = NULL;
-            continue;
         }
-        if (strcmp(token, "<") == 0) {
+        else if (strcmp(token, "<") == 0) {
             input[cmdIndex].hasInRedirect = true;
             inRedirectIndex = numTokens + 1;
-            numTokens++;
-            cl_copy = NULL;
-            continue;
         }
-        if (strcmp(token, "2>") == 0) {
+        else if (strcmp(token, "2>") == 0) {
             input[cmdIndex].hasErrorRedirect = true;
             errorRedirectIndex = numTokens + 1;
-            numTokens++;
-            continue;
         }
-        if (strcmp(token, "|") == 0) {
+        else if (strcmp(token, "|") == 0) {
+            input[cmdIndex].hasPipe = true;
             cmdIndex++;
-            cmdHasPipe = true;
             numCommands++;
-            flagIndex = 0;
+            argvIndex = 0;
             input[cmdIndex].numArgs = 0;
-            numTokens++;
-            cl_copy = NULL;
-            continue;
+            recognizeCommand = true;
         }
-        if (token[0] == '-' || isalnum(token[0])) {
-            if ((numTokens == inRedirectIndex) ||
-                (numTokens == outRedirectIndex) ||
-                (numTokens == errorRedirectIndex)) {
-                numTokens++;
-                cl_copy = NULL;
-                continue;
+        else if (token[0] == '-' || isalnum(token[0])) {
+            // We'll be grabbing the redirection file names in the for loop, so these
+            // should just be argv given to the command
+            if ((numTokens != inRedirectIndex) &&
+                (numTokens != outRedirectIndex) &&
+                (numTokens != errorRedirectIndex)) {
+                input[cmdIndex].argv[argvIndex] = strdup(token);
+                input[cmdIndex].numArgs++;
+                argvIndex++;
             }
-            input[cmdIndex].argv[flagIndex] = strdup(token);
-            input[cmdIndex].numArgs++;
-            flagIndex++;
-            numTokens++;
-            cl_copy = NULL;
-            continue;
         }
+        numTokens++;
+        cl_copy = NULL;
     }
     for (int i = 0; i < numCommands; i++) {
         if (input[i].hasOutRedirect) {
@@ -193,6 +185,11 @@ void stopHandler(int signum) {
     printf("Received stop signal");
 }
 
+void piping()
+{
+
+}
+
 int main() {
     char *inString;
     while (1) {
@@ -202,42 +199,50 @@ int main() {
         if (inString == NULL)
             break;
         parseString(inString);
-        currentProcess = fork();
-
-        if (currentProcess == 0) {
-            if (input[commandIndex].hasInRedirect)
-            {
-                redirectInput();
-            }
-            if (input[commandIndex].hasOutRedirect) {
-                redirectOutput();
-            }
-            if (input[commandIndex].hasErrorRedirect)
-            {
-                redirectError();
-            }
-            execvp(input[commandIndex].command, input[commandIndex].fexec);
-        } else {
-            wait((int *) NULL);
-            for (int i = 0; i < numCommands; i++)
-            {
-                free(input[i].command);
-                if (input[i].numArgs > 0) {
-                    for (int j = 0; j < input[i].numArgs; j++) {
-                        free(input[i].argv[j]);
+        if (input[0].hasPipe)
+        {
+            piping();
+        }
+        else {
+            currentProcess = fork();
+            if (currentProcess == 0) {
+                if (input[commandIndex].hasInRedirect) {
+                    redirectInput();
+                }
+                if (input[commandIndex].hasOutRedirect) {
+                    redirectOutput();
+                }
+                if (input[commandIndex].hasErrorRedirect) {
+                    redirectError();
+                }
+                execvp(input[commandIndex].command, input[commandIndex].fexec);
+            } else {
+                int status;
+                wait((int*)NULL);
+                // frees all my strdup'd memory
+                for (int i = 0; i < numCommands; i++) {
+                    free(input[i].command);
+                    if (input[i].numArgs > 0) {
+                        for (int j = 0; j < input[i].numArgs; j++) {
+                            free(input[i].argv[j]);
+                        }
                     }
-                }
-                if (input[i].hasInRedirect) {
-                    free(input[i].inRedirectFileName);
-                    input[i].hasInRedirect = false;
-                }
-                if (input[i].hasOutRedirect) {
-                    free(input[i].outRedirectFileName);
-                    input[i].hasOutRedirect = false;
-                }
-                if (input[i].hasErrorRedirect) {
-                    free(input[i].errorRedirectFileName);
-                    input[i].hasErrorRedirect = false;
+                    if (input[i].hasInRedirect) {
+                        free(input[i].inRedirectFileName);
+                        input[i].hasInRedirect = false;
+                    }
+                    if (input[i].hasOutRedirect) {
+                        free(input[i].outRedirectFileName);
+                        input[i].hasOutRedirect = false;
+                    }
+                    if (input[i].hasErrorRedirect) {
+                        free(input[i].errorRedirectFileName);
+                        input[i].hasErrorRedirect = false;
+                    }
+                    for (int j = 0; input[i].fexec[j] != (char*)NULL; j++)
+                    {
+                        input[i].fexec[j] = (char*)NULL;
+                    }
                 }
             }
         }
