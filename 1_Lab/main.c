@@ -61,6 +61,8 @@ int numCommands = 1;
 // will be the pid
 pid_t currentProcess;
 
+void freeCommands();
+
 void parseString(char *str); //parses an command into strings
 void stopHandler(int signum);
 
@@ -185,6 +187,32 @@ void stopHandler(int signum) {
     printf("Received stop signal");
 }
 
+void freeCommands() {
+    for (int i = 0; i < numCommands; i++) {
+        free(input[i].command);
+        if (input[i].numArgs > 0) {
+            for (int j = 0; j < input[i].numArgs; j++) {
+                free(input[i].argv[j]);
+            }
+        }
+        if (input[i].hasInRedirect) {
+            free(input[i].inRedirectFileName);
+            input[i].hasInRedirect = false;
+        }
+        if (input[i].hasOutRedirect) {
+            free(input[i].outRedirectFileName);
+            input[i].hasOutRedirect = false;
+        }
+        if (input[i].hasErrorRedirect) {
+            free(input[i].errorRedirectFileName);
+            input[i].hasErrorRedirect = false;
+        }
+        for (int j = 0; input[i].fexec[j] != (char *) NULL; j++) {
+            input[i].fexec[j] = (char *) NULL;
+        }
+    }
+}
+
 void piping()
 {
 
@@ -218,32 +246,10 @@ int main() {
                 execvp(input[commandIndex].command, input[commandIndex].fexec);
             } else {
                 int status;
-                wait((int*)NULL);
-                // frees all my strdup'd memory
-                for (int i = 0; i < numCommands; i++) {
-                    free(input[i].command);
-                    if (input[i].numArgs > 0) {
-                        for (int j = 0; j < input[i].numArgs; j++) {
-                            free(input[i].argv[j]);
-                        }
-                    }
-                    if (input[i].hasInRedirect) {
-                        free(input[i].inRedirectFileName);
-                        input[i].hasInRedirect = false;
-                    }
-                    if (input[i].hasOutRedirect) {
-                        free(input[i].outRedirectFileName);
-                        input[i].hasOutRedirect = false;
-                    }
-                    if (input[i].hasErrorRedirect) {
-                        free(input[i].errorRedirectFileName);
-                        input[i].hasErrorRedirect = false;
-                    }
-                    for (int j = 0; input[i].fexec[j] != (char*)NULL; j++)
-                    {
-                        input[i].fexec[j] = (char*)NULL;
-                    }
-                }
+                wait(&status);
+                // frees all my strdup'd memory & reinitalizes the input array so it's
+                // ready to take in more input
+                freeCommands();
             }
         }
     }
