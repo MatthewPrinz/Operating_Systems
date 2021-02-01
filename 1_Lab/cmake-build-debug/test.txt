@@ -1,0 +1,9 @@
+1_status is: 0# CMakeCache.txt
+CMakeFiles
+cmake_install.cmake
+main.c
+Makefile
+Testing
+test.txt
+while
+while.c

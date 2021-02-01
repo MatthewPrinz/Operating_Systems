@@ -37,6 +37,7 @@
 // max num jobs <= 20
 // & always at the end
 int numJobs = 0;
+pid_t currentPgid;
 
 typedef struct Commands {
     char *command;
@@ -50,25 +51,33 @@ typedef struct Commands {
     bool hasErrorRedirect;
     char *errorRedirectFileName;
     bool hasPipe;
+    bool runInBackground;
+    bool runOnForeBackground;
+    pid_t pgid;
     pid_t pid;
 } command_t;
 
 // Has all the related to commands in one simple struct
 command_t input[2];
+command_t jobs[20];
 
-int commandIndex;
+// Most of the time is equal to 0, except when we're in executeTwoCommands in which case
+// it will get incremented.
+int commandIndex = 0;
+
+int numJobs;
+int jobsIndex = 0;
 int numCommands = 1;
-// will be the pid
 pid_t currentProcess;
 
 void freeCommands();
-
 void parseString(char *str); //parses an command into strings
-void stopHandler(int signum);
 
-void intHandler(int signum);
+void sigHandler(int signum);
 
-void piping();
+void executeTwoCommands();
+
+void executeOneCommand();
 
 void redirectOutput();
 
@@ -76,12 +85,21 @@ void redirectInput();
 
 void redirectError();
 
-void JOBCONTROL(); // name to change
+void printJobs();
+
+void bg();
+
+void fg();
 
 void parseString(char *str) {
     char *tokenizedCommand[2000];
-    // Need to initialize numArgs for my struct
-    input[0].numArgs = 0;
+    // new command means we set commandIndex back to 0
+    commandIndex = 0;
+    // Need to initialize my struct
+    input[commandIndex].numArgs = 0;
+    input[commandIndex].runInBackground = false;
+    input[commandIndex].runOnForeBackground = false;
+
     int cmdIndex = 0;
     int numTokens = 0;
     char *cl_copy, *token, *save_ptr;
@@ -119,6 +137,10 @@ void parseString(char *str) {
             argvIndex = 0;
             input[cmdIndex].numArgs = 0;
             recognizeCommand = true;
+        }
+        else if (strcmp(token, "&") == 0)
+        {
+            input[cmdIndex].runInBackground = true;
         }
         else if (token[0] == '-' || isalnum(token[0])) {
             // We'll be grabbing the redirection file names in the for loop, so these
@@ -177,14 +199,41 @@ void redirectError()
     dup2(fd, STDERR_FILENO);
 }
 
-void intHandler(int signum) {
-    kill(SIGINT, currentProcess);
-    printf("Received int signal");
+void sigHandler(int signum)
+{
+    switch (signum) {
+        case SIGTSTP:
+            kill(currentProcess, SIGTSTP);
+            kill((-1 * currentPgid), SIGTSTP);
+            for (int i = 0; i < numJobs; i++) {
+            }
+            jobs[jobsIndex].runOnForeBackground = true;
+            printf("Received stop signal");
+            break;
+        case SIGINT:
+            kill(currentProcess, SIGINT);
+            printf("Received int signal");
+            break;
+        case SIGCHLD:
+            // going to involve updating jobs
+            break;
+    }
 }
 
-void stopHandler(int signum) {
-    kill(SIGTSTP, currentProcess);
-    printf("Received stop signal");
+void fg()
+{
+
+}
+
+void bg()
+{
+    for (int i = 0; i < numJobs; i++)
+    {
+        if (jobs[i].runOnForeBackground) {
+            kill((-1*jobs[i].pgid), SIGCONT);
+            kill(jobs[i].pid, SIGCONT);
+        }
+    }
 }
 
 void freeCommands() {
@@ -213,44 +262,101 @@ void freeCommands() {
     }
 }
 
-void piping()
-{
+void executeTwoCommands() {
+    int pipefd[2];
+    pipe(pipefd);
+    close(pipefd[0]);
+    close(pipefd[1]);
+    currentProcess = fork();
+    setpgid(0, 0);
+    currentPgid = getpgid(currentProcess);
+    // child 1
+    if (currentProcess == 0) {
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO);
+        if (input[commandIndex].hasInRedirect) {
+            redirectInput();
+        }
+        if (input[commandIndex].hasOutRedirect) {
+            redirectOutput();
+        }
+        if (input[commandIndex].hasErrorRedirect) {
+            redirectError();
+        }
+        execvp(input[commandIndex].command, input[commandIndex].fexec);
+    }
+    commandIndex++;
+    currentProcess = fork();
+    // child 2
+    if (currentProcess == 0) {
+        close(pipefd[1]);
+        dup2(pipefd[0], STDIN_FILENO);
+        if (input[commandIndex].hasInRedirect) {
+            redirectInput();
+        }
+        if (input[commandIndex].hasOutRedirect) {
+            redirectOutput();
+        }
+        if (input[commandIndex].hasErrorRedirect) {
+            redirectError();
+        }
+        execvp(input[commandIndex].command, input[commandIndex].fexec);
+    }
+    int status;
+    wait(&status);
+}
 
+void executeOneCommand() {
+    if (input[commandIndex].runInBackground)
+    {
+        // add to jobs list
+    }
+    currentProcess = fork();
+    if (currentProcess == 0) {
+        if (input[commandIndex].hasInRedirect) {
+            redirectInput();
+        }
+        if (input[commandIndex].hasOutRedirect) {
+            redirectOutput();
+        }
+        if (input[commandIndex].hasErrorRedirect) {
+            redirectError();
+        }
+        execvp(input[commandIndex].command, input[commandIndex].fexec);
+    } else {
+        int status;
+        if (input[commandIndex].runInBackground) {
+            waitpid(currentProcess, &status, WNOHANG);
+        } else {
+            wait(&status);
+            printf("status is: %d", status);
+        }
+        // frees all my strdup'd memory & reinitalizes the input array so it's
+        // ready to take in more input
+        freeCommands();
+    }
 }
 
 int main() {
     char *inString;
     while (1) {
-        signal(SIGINT, intHandler);
-        signal(SIGSTOP, stopHandler);
+        signal(SIGINT, sigHandler);
+        signal(SIGTSTP, sigHandler);
+        signal(SIGCHLD, sigHandler);
         inString = readline("# ");
         if (inString == NULL)
             break;
         parseString(inString);
-        if (input[0].hasPipe)
+        if (strcmp(input[commandIndex].command, "bg") == 0)
+            bg();
+        else if (strcmp(input[commandIndex].command, "fg") == 0)
+            fg();
+        else if (input[commandIndex].hasPipe)
         {
-            piping();
+            executeTwoCommands();
         }
         else {
-            currentProcess = fork();
-            if (currentProcess == 0) {
-                if (input[commandIndex].hasInRedirect) {
-                    redirectInput();
-                }
-                if (input[commandIndex].hasOutRedirect) {
-                    redirectOutput();
-                }
-                if (input[commandIndex].hasErrorRedirect) {
-                    redirectError();
-                }
-                execvp(input[commandIndex].command, input[commandIndex].fexec);
-            } else {
-                int status;
-                wait(&status);
-                // frees all my strdup'd memory & reinitalizes the input array so it's
-                // ready to take in more input
-                freeCommands();
-            }
+            executeOneCommand();
         }
     }
 }
