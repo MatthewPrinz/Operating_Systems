@@ -346,6 +346,7 @@ void freeCommands() {
 void executeTwoCommands() {
     int pipefd[2];
     int status, pid_ch1, pid_ch2, pid;
+    pipe(pipefd);
     pid_ch1 = fork();
     if (pid_ch1 > 0) {
         printf("Child1 pid = %d\n", pid_ch1);
@@ -402,6 +403,7 @@ void executeTwoCommands() {
             redirectError(0);
         }
         execvp(input[0].command, input[0].fexec);
+        exit(0);
     }
 }
 
