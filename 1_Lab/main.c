@@ -50,16 +50,17 @@ typedef struct Commands {
     bool hasErrorRedirect;
     char *errorRedirectFileName;
     bool hasPipe;
-    pid_t pgid;
-    pid_t pid;
 } command_t;
 
 typedef struct Jobs
 {
     command_t commands[2];
     int numCommands;
+    pid_t pid1;
+    pid_t pid2;
     bool runOnForeBackground;
     bool runInBackground;
+    pid_t pgid;
 } job_t;
 
 // Has all the related to commands in one simple struct
@@ -174,14 +175,12 @@ void parseString(char *str) {
         }
         input[i].fexec[j+1] = (char*) NULL;
     }
-    if (makeJob)
+    jobs[jobsIndex].numCommands = numCommands;
+    for (int i = 0; i < numCommands; i++)
     {
-        jobs[jobsIndex].numCommands = numCommands;
-        for (int i = 0; i < numCommands; i++)
-        {
-            jobs[jobsIndex].commands[i] = input[i];
-        }
+        jobs[jobsIndex].commands[i] = input[i];
     }
+    numJobs++;
     free(str);
 }
 /**
@@ -210,6 +209,7 @@ void sigHandler(int signum)
 {
     switch (signum) {
         case SIGTSTP:
+            printf("Received stop signal");
             if (runningTwoCommands)
                 kill((-1 * currentPgid), SIGTSTP);
             else
@@ -217,7 +217,6 @@ void sigHandler(int signum)
             for (int i = 0; i < numJobs; i++) {
                 for (int j = 0; j < jobs[i].numCommands; j++) {
                     jobs[i].runOnForeBackground = true;
-                    printf("Received stop signal");
                     // one of the commands will need to set runOnForeBackground true.
                 }
             }
@@ -229,7 +228,14 @@ void sigHandler(int signum)
                 kill(currentProcess, SIGINT);
             break;
         case SIGCHLD:
-            // going to involve updating jobs
+            numJobs--;
+
+            printf("Received SIGCHLD");
+            break;
+        case SIGCONT:
+            break;
+        default:
+            printf("Signal number = %d, not handled", signum);
             break;
     }
 }
@@ -272,76 +278,6 @@ void freeCommands() {
     }
 }
 
-//void executeTwoCommands() {
-//    runningTwoCommands = true;
-//    int pipefd[2];
-//    int pid;
-//    int count = 0;
-//    int status;
-//    pipe(pipefd);
-//    close(pipefd[0]);
-//    close(pipefd[1]);
-//    currentProcess = fork();
-//    // child 1
-//    if (currentProcess == 0) {
-//        setpgid(0, 0);
-//        close(pipefd[0]);
-//        dup2(pipefd[1], STDOUT_FILENO);
-//        if (input[commandIndex].hasInRedirect) {
-//            redirectInput();
-//        }
-//        if (input[commandIndex].hasOutRedirect) {
-//            redirectOutput();
-//        }
-//        if (input[commandIndex].hasErrorRedirect) {
-//            redirectError();
-//        }
-//        execvp(input[commandIndex].command, input[commandIndex].fexec);
-//    }
-//    else {
-//        while (count < 2) {
-//            pid = waitpid(-1, &status, WUNTRACED | WCONTINUED);
-//            // wait does not take options:
-//            //    waitpid(-1,&status,0) is same as wait(&status)
-//            // with no options waitpid wait only for terminated child processes
-//            // with options we can specify what other changes in the child's status
-//            // we can respond to. Here we are saying we want to also know if the child
-//            // has been stopped (WUNTRACED) or continued (WCONTINUED)
-//            if (WIFEXITED(status)) {
-//                printf("child %d exited, status=%d\n", pid, WEXITSTATUS(status));
-//                count++;
-//            } else if (WIFSIGNALED(status)) {
-//                printf("child %d killed by signal %d\n", pid, WTERMSIG(status));
-//                count++;
-//            } else if (WIFSTOPPED(status)) {
-//
-//                printf("%d stopped by signal %d\n", pid, WSTOPSIG(status));
-//                printf("Sending CONT to %d\n", pid);
-//                sleep(4); //sleep for 4 seconds before sending CONT
-//                kill(pid, SIGCONT);
-//            } else if (WIFCONTINUED(status)) {
-//                printf("Continuing %d\n", pid);
-//            }
-//        }
-//    }
-//    commandIndex++;
-//    currentProcess = fork();
-//    // child 2
-//    if (currentProcess == 0) {
-//        close(pipefd[1]);
-//        dup2(pipefd[0], STDIN_FILENO);
-//        if (input[commandIndex].hasInRedirect) {
-//            redirectInput();
-//        }
-//        if (input[commandIndex].hasOutRedirect) {
-//            redirectOutput();
-//        }
-//        if (input[commandIndex].hasErrorRedirect) {
-//            redirectError();
-//        }
-//        execvp(input[commandIndex].command, input[commandIndex].fexec);
-//    }
-//}
 
 void executeTwoCommands() {
     int pipefd[2];
@@ -349,16 +285,22 @@ void executeTwoCommands() {
     pipe(pipefd);
     pid_ch1 = fork();
     if (pid_ch1 > 0) {
+        jobs[jobsIndex].pid1 = pid_ch1;
         printf("Child1 pid = %d\n", pid_ch1);
         // Parent
         pid_ch2 = fork();
         if (pid_ch2 > 0) {
+            jobs[jobsIndex].pid2 = pid_ch2;
             printf("Child2 pid = %d\n", pid_ch2);
             close(pipefd[0]); //close the pipe in the parent
             close(pipefd[1]);
             int count = 0;
             while (count < 2) {
                 pid = waitpid(-1, &status, WUNTRACED | WCONTINUED);
+                if (status == -1)
+                {
+                    // clean up job
+                }
                 if (WIFEXITED(status)) {
                     printf("child %d exited, status=%d\n", pid, WEXITSTATUS(status));
                     count++;
@@ -385,7 +327,10 @@ void executeTwoCommands() {
             if (input[1].hasErrorRedirect) {
                 redirectError(1);
             }
-            execvp(input[1].command, input[1].fexec);
+            if (execvp(input[1].command, input[1].fexec) == -1) {
+                exit(-1);
+            }
+
         }
     } else {
         // Child 1
@@ -402,8 +347,9 @@ void executeTwoCommands() {
         if (input[0].hasErrorRedirect) {
             redirectError(0);
         }
-        execvp(input[0].command, input[0].fexec);
-        exit(0);
+        if (execvp(input[0].command, input[0].fexec) == -1) {
+            exit(-1);
+        }
     }
 }
 
@@ -427,20 +373,24 @@ void executeOneCommand() {
         }
     } else {
         int status;
-        int pid = waitpid(-1, &status, WUNTRACED | WCONTINUED);
+        currentProcess = waitpid(-1, &status, WUNTRACED | WCONTINUED);
         // wait does not take options:
         //    waitpid(-1,&status,0) is same as wait(&status)
         // with no options waitpid wait only for terminated child processes
         // with options we can specify what other changes in the child's status
         // we can respond to. Here we are saying we want to also know if the child
         // has been stopped (WUNTRACED) or continued (WCONTINUED)
+        if (status == -1)
+        {
+            // clean up jobtable
+        }
         if (WIFEXITED(status)) {
-            printf("child %d exited, status=%d\n", pid, WEXITSTATUS(status));
+            printf("child %d exited, status=%d\n", currentProcess, WEXITSTATUS(status));
         } else if (WIFSTOPPED(status)) {
-            printf("%d stopped by signal %d\n", pid, WSTOPSIG(status));
+            printf("%d stopped by signal %d\n", currentProcess, WSTOPSIG(status));
             // PLACE HOLDER
         } else if (WIFCONTINUED(status)) {
-            printf("Continuing %d\n", pid);
+            printf("Continuing %d\n", currentProcess);
             // PLACE HOLDER
         }
 //        if (input[commandIndex].runInBackground) {
@@ -461,6 +411,8 @@ int main() {
         signal(SIGINT, sigHandler);
         signal(SIGTSTP, sigHandler);
         signal(SIGCHLD, sigHandler);
+        signal(SIGCONT, sigHandler);
+        signal(SIGTTOU, sigHandler);
         inString = readline("# ");
         if (inString == NULL)
             break;
@@ -469,6 +421,8 @@ int main() {
             bg();
         else if (strcmp(input[0].command, "fg") == 0)
             fg();
+        else if (strcmp(input[0].command, "jobs") == 0)
+            printJobs();
         else if (input[0].hasPipe)
         {
             executeTwoCommands();
