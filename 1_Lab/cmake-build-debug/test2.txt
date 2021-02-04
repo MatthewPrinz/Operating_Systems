@@ -1,15 +1,1 @@
-total 156K
-drwxrwxr-x 4 matt matt 4.0K Feb  1 23:55 .
-drwxrwxr-x 4 matt matt 4.0K Feb  1 23:43 ..
--rwxrwxr-x 1 matt matt  34K Feb  1 23:55 1_Lab
--rw-rw-r-- 1 matt matt 5.4K Jan 30 01:42 1_Lab.cbp
--rw-rw-r-- 1 matt matt  23K Jan 30 01:42 CMakeCache.txt
-drwxrwxr-x 4 matt matt 4.0K Feb  1 23:55 CMakeFiles
--rw-rw-r-- 1 matt matt 1.6K Jan 30 01:42 cmake_install.cmake
--rwxrwxr-x 1 matt matt  28K Feb  1 15:15 main
--rw-rw-r-- 1 matt matt 6.3K Jan 30 04:04 main.c
--rw-rw-r-- 1 matt matt 5.3K Jan 30 01:42 Makefile
-drwxrwxr-x 3 matt matt 4.0K Jan 30 01:42 Testing
--rw-r--r-- 1 matt matt    0 Feb  1 23:55 test.txt
--rwxrwxr-x 1 matt matt  17K Jan 30 03:57 while
--rw-rw-r-- 1 matt matt   25 Jan 30 03:50 while.c
+i am testfile2 hihihi

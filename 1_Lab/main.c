@@ -55,14 +55,15 @@ typedef struct Commands {
 typedef struct Jobs
 {
     command_t commands[2];
+    char* fullInput;
     int numCommands;
     pid_t pid1;
     pid_t pid2;
     bool runOnForeBackground;
     bool runInBackground;
     pid_t pgid;
+    bool jobDone;
 } job_t;
-
 // Has all the related to commands in one simple struct
 command_t input[2];
 int numJobs = 0;
@@ -89,6 +90,8 @@ void redirectInput(int inputIndex);
 void redirectError(int inputIndex);
 
 void printJobs();
+
+void freeJob(int index);
 
 void bg();
 
@@ -139,7 +142,6 @@ void parseString(char *str) {
         }
         else if (strcmp(token, "&") == 0)
         {
-            numJobs++;
             jobs[jobsIndex].runInBackground = true;
             makeJob = true;
         }
@@ -181,6 +183,7 @@ void parseString(char *str) {
         jobs[jobsIndex].commands[i] = input[i];
     }
     numJobs++;
+    jobs[jobsIndex].fullInput = strdup(str);
     free(str);
 }
 /**
@@ -210,10 +213,11 @@ void sigHandler(int signum)
     switch (signum) {
         case SIGTSTP:
             printf("Received stop signal");
-            if (runningTwoCommands)
-                kill((-1 * currentPgid), SIGTSTP);
-            else
-                kill(currentProcess, SIGTSTP);
+            kill((-1 * currentPgid), SIGTSTP);
+//            if (runningTwoCommands)
+//                kill((-1 * currentPgid), SIGTSTP);
+//            else
+//                kill(currentProcess, SIGTSTP);
             for (int i = 0; i < numJobs; i++) {
                 for (int j = 0; j < jobs[i].numCommands; j++) {
                     jobs[i].runOnForeBackground = true;
@@ -229,7 +233,6 @@ void sigHandler(int signum)
             break;
         case SIGCHLD:
             numJobs--;
-
             printf("Received SIGCHLD");
             break;
         case SIGCONT:
@@ -240,15 +243,28 @@ void sigHandler(int signum)
     }
 }
 
+void freeJob(int index)
+{
+    jobs[index].runInBackground = false;
+    jobs[index].runOnForeBackground = false;
+    jobs[index].numCommands = false;
+    free(jobs[index].fullInput);
+}
+
 void fg()
 {
-
+    for (int i = 0; i < numJobs; i++)
+    {
+        if (jobs[i].runOnForeBackground)
+            kill(-1*(jobs[i].pgid), SIGCONT);
+    }
 }
 
 void bg()
 {
-    for (int i = 0; i < numJobs; i++)
-    {
+    for (int i = 0; i < numJobs; i++) {
+        if (jobs[i].runOnForeBackground)
+            kill(-1 * (jobs[i].pgid), SIGCONT);
     }
 }
 
@@ -287,6 +303,7 @@ void executeTwoCommands() {
     if (pid_ch1 > 0) {
         jobs[jobsIndex].pid1 = pid_ch1;
         printf("Child1 pid = %d\n", pid_ch1);
+        currentPgid = pid_ch1;
         // Parent
         pid_ch2 = fork();
         if (pid_ch2 > 0) {
@@ -296,6 +313,8 @@ void executeTwoCommands() {
             close(pipefd[1]);
             int count = 0;
             while (count < 2) {
+                int stat = tcsetpgrp(0, pid_ch1);
+                printf("tcsetpgrp returned: %d\n", stat);
                 pid = waitpid(-1, &status, WUNTRACED | WCONTINUED);
                 if (status == -1)
                 {
@@ -312,7 +331,7 @@ void executeTwoCommands() {
                     // PLACE HOLDER
                 }
             }
-            exit(1);
+            freeCommands();
         } else {
             //Child 2
             setpgid(0, pid_ch1); //child2 joins the group whose group id is same as child1's pid
@@ -372,8 +391,13 @@ void executeOneCommand() {
             exit(-1);
         }
     } else {
-        int status;
-        currentProcess = waitpid(-1, &status, WUNTRACED | WCONTINUED);
+        int status = 100;
+        if (!jobs[jobsIndex].runInBackground) {
+            currentProcess = waitpid(-1, &status, WUNTRACED | WCONTINUED);
+            // frees all my strdup'd memory & reinitalizes the input array so it's
+            // ready to take in more input
+            freeCommands();
+        }
         // wait does not take options:
         //    waitpid(-1,&status,0) is same as wait(&status)
         // with no options waitpid wait only for terminated child processes
@@ -393,16 +417,25 @@ void executeOneCommand() {
             printf("Continuing %d\n", currentProcess);
             // PLACE HOLDER
         }
-//        if (input[commandIndex].runInBackground) {
-//            waitpid(currentProcess, &status, WNOHANG);
-//        } else {
-//            wait(&status);
-//            printf("status is: %d\n", status);
-//        }
-        // frees all my strdup'd memory & reinitalizes the input array so it's
-        // ready to take in more input
-        freeCommands();
     }
+}
+
+void printJobs()
+{
+    int numJobsFinished = 0;
+    for (int i = 0; i < numJobs; i++)
+    {
+        if (jobs[i].jobDone) {
+            printf("[%d]- Done %s", i, jobs[i].fullInput);
+            numJobsFinished++;
+            freeJob(i);
+        }
+    }
+    for (int i = 0; i < numJobs; i++)
+    {
+
+    }
+    numJobs -= numJobsFinished;
 }
 
 int main() {
