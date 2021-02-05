@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdbool.h>
+#include <errno.h>
 
 /**
  * Data structures I need to create:
@@ -33,11 +34,10 @@
  * kill - both positive & negative, positive for processes, negative for ctrl c & ctrl z
  *
  */
-
-// max num jobs <= 20
+#define DEBUG 1
+// max num g_jobs <= 20
 // & always at the end
-pid_t currentPgid;
-bool runningTwoCommands = false;
+pid_t g_currentPgid;
 typedef struct Commands {
     char *command;
     char *fexec[2000];
@@ -50,31 +50,25 @@ typedef struct Commands {
     bool hasErrorRedirect;
     char *errorRedirectFileName;
     bool hasPipe;
-} command_t;
+} Command_t;
 
-typedef struct Jobs
-{
-    command_t commands[2];
-    char* fullInput;
+typedef struct Jobs {
+    Command_t commands[2];
+    char *fullInput;
     int numCommands;
-    pid_t pid1;
-    pid_t pid2;
     bool runOnForeBackground;
     bool runInBackground;
     pid_t pgid;
-    bool jobDone;
-} job_t;
+    int jobNumber;
+} Job_t;
 // Has all the related to commands in one simple struct
-command_t input[2];
-int numJobs = 0;
-job_t jobs[20];
+Command_t input[2];
+int g_numJobs = 0;
+int g_jobsNumber = 0;
+Job_t g_jobs[20];
 
+int g_jobsIndex = 0;
 
-int jobsIndex = 0;
-int numCommands = 1;
-pid_t currentProcess;
-
-void freeCommands();
 void parseString(char *str); //parses an command into strings
 
 void sigHandler(int signum);
@@ -89,19 +83,25 @@ void redirectInput(int inputIndex);
 
 void redirectError(int inputIndex);
 
+void updateJobs();
+
 void printJobs();
 
-void freeJob(int index);
+void freeJobs(int index);
 
 void bg();
 
 void fg();
 
+
 void parseString(char *str) {
     char *tokenizedCommand[2000];
     // Need to initialize my struct
     input[0].numArgs = 0;
-    bool makeJob = false;
+    if (g_numJobs == 0)
+        g_jobs[g_jobsIndex].runOnForeBackground = true;
+    g_jobs[g_jobsIndex].jobNumber = ++g_jobsNumber;
+    g_jobs[g_jobsIndex].numCommands = 1;
     int cmdIndex = 0;
     int numTokens = 0;
     char *cl_copy, *token, *save_ptr;
@@ -119,33 +119,25 @@ void parseString(char *str) {
         if (recognizeCommand) {
             input[cmdIndex].command = strdup(token);
             recognizeCommand = false;
-        }
-        else if (strcmp(token, ">") == 0) {
+        } else if (strcmp(token, ">") == 0) {
             input[cmdIndex].hasOutRedirect = true;
             outRedirectIndex = numTokens + 1;
-        }
-        else if (strcmp(token, "<") == 0) {
+        } else if (strcmp(token, "<") == 0) {
             input[cmdIndex].hasInRedirect = true;
             inRedirectIndex = numTokens + 1;
-        }
-        else if (strcmp(token, "2>") == 0) {
+        } else if (strcmp(token, "2>") == 0) {
             input[cmdIndex].hasErrorRedirect = true;
             errorRedirectIndex = numTokens + 1;
-        }
-        else if (strcmp(token, "|") == 0) {
+        } else if (strcmp(token, "|") == 0) {
             input[cmdIndex].hasPipe = true;
             cmdIndex++;
-            numCommands++;
+            g_jobs[0].numCommands++;
             argvIndex = 0;
             input[cmdIndex].numArgs = 0;
             recognizeCommand = true;
-        }
-        else if (strcmp(token, "&") == 0)
-        {
-            jobs[jobsIndex].runInBackground = true;
-            makeJob = true;
-        }
-        else if (token[0] == '-' || isalnum(token[0])) {
+        } else if (strcmp(token, "&") == 0) {
+            g_jobs[g_jobsIndex].runInBackground = true;
+        } else if (token[0] == '-' || isalnum(token[0])) {
             // We'll be grabbing the redirection file names in the for loop, so these
             // should just be argv given to the command
             if ((numTokens != inRedirectIndex) &&
@@ -159,7 +151,7 @@ void parseString(char *str) {
         numTokens++;
         cl_copy = NULL;
     }
-    for (int i = 0; i < numCommands; i++) {
+    for (int i = 0; i < g_jobs[g_jobsIndex].numCommands; i++) {
         if (input[i].hasOutRedirect) {
             input[i].outRedirectFileName = strdup(tokenizedCommand[outRedirectIndex]);
         }
@@ -171,21 +163,19 @@ void parseString(char *str) {
         }
         input[i].fexec[0] = input[i].command;
         int j;
-        for (j = 1; j < input[i].numArgs + 1; j++)
-        {
+        for (j = 1; j < input[i].numArgs + 1; j++) {
             input[i].fexec[j] = input[i].argv[j - 1];
         }
-        input[i].fexec[j+1] = (char*) NULL;
+        input[i].fexec[j + 1] = (char *) NULL;
     }
-    jobs[jobsIndex].numCommands = numCommands;
-    for (int i = 0; i < numCommands; i++)
-    {
-        jobs[jobsIndex].commands[i] = input[i];
+    for (int i = 0; i < g_jobs[g_jobsIndex].numCommands; i++) {
+        g_jobs[g_jobsIndex].commands[i] = input[i];
     }
-    numJobs++;
-    jobs[jobsIndex].fullInput = strdup(str);
+    g_numJobs++;
+    g_jobs[g_jobsIndex].fullInput = strdup(str);
     free(str);
 }
+
 /**
  * For dealing with ">"
  */
@@ -193,83 +183,70 @@ void redirectOutput(int inputIndex) {
     int fd = creat(input[inputIndex].outRedirectFileName, 0644);
     dup2(fd, STDOUT_FILENO);
 }
+
 /**
  * For dealing with "<"
  */
-void redirectInput(int inputIndex)
-{
+void redirectInput(int inputIndex) {
     int fd = open(input[inputIndex].inRedirectFileName, O_RDONLY);
     dup2(fd, STDIN_FILENO);
 }
 
-void redirectError(int inputIndex)
-{
+void redirectError(int inputIndex) {
     int fd = creat(input[inputIndex].errorRedirectFileName, 0644);
     dup2(fd, STDERR_FILENO);
 }
 
-void sigHandler(int signum)
-{
+void sigHandler(int signum) {
     switch (signum) {
         case SIGTSTP:
-            printf("Received stop signal");
-            kill((-1 * currentPgid), SIGTSTP);
-//            if (runningTwoCommands)
-//                kill((-1 * currentPgid), SIGTSTP);
-//            else
-//                kill(currentProcess, SIGTSTP);
-            for (int i = 0; i < numJobs; i++) {
-                for (int j = 0; j < jobs[i].numCommands; j++) {
-                    jobs[i].runOnForeBackground = true;
+            if (DEBUG)
+                printf("Received stop signal");
+            kill((-1 * g_currentPgid), SIGTSTP);
+            for (int i = 0; i < g_numJobs; i++) {
+                for (int j = 0; j < g_jobs[i].numCommands; j++) {
+                    g_jobs[i].runOnForeBackground = true;
                     // one of the commands will need to set runOnForeBackground true.
                 }
             }
             break;
         case SIGINT:
-            if (runningTwoCommands)
-                kill((-1 * currentPgid), SIGINT);
-            else
-                kill(currentProcess, SIGINT);
-            break;
-        case SIGCHLD:
-            numJobs--;
-            printf("Received SIGCHLD");
+            if (DEBUG)
+                printf("Received SIGINT");
+            kill((-1 * g_currentPgid), SIGTSTP);
             break;
         case SIGCONT:
+            // NOT SURE IF THIS SHOULD BE HERE, PRETTY SURE I WANT MY SIGCONTS TO GO TO ACTUAL
+            // PGRPS
+            break;
+        case 22:
+            if (DEBUG)
+                printf("received sigttou");
+            sleep(10);
             break;
         default:
-            printf("Signal number = %d, not handled", signum);
+            if (DEBUG)
+                printf("Signal number = %d, not handled", signum);
             break;
     }
 }
 
-void freeJob(int index)
-{
-    jobs[index].runInBackground = false;
-    jobs[index].runOnForeBackground = false;
-    jobs[index].numCommands = false;
-    free(jobs[index].fullInput);
-}
-
-void fg()
-{
-    for (int i = 0; i < numJobs; i++)
-    {
-        if (jobs[i].runOnForeBackground)
-            kill(-1*(jobs[i].pgid), SIGCONT);
+void fg() {
+    for (int i = 0; i < g_numJobs; i++) {
+        if (g_jobs[i].runOnForeBackground)
+            kill(-1 * (g_jobs[i].pgid), SIGCONT);
     }
 }
 
-void bg()
-{
-    for (int i = 0; i < numJobs; i++) {
-        if (jobs[i].runOnForeBackground)
-            kill(-1 * (jobs[i].pgid), SIGCONT);
+void bg() {
+    for (int i = 0; i < g_numJobs; i++) {
+        if (g_jobs[i].runOnForeBackground)
+            kill(-1 * (g_jobs[i].pgid), SIGCONT);
     }
 }
 
-void freeCommands() {
-    for (int i = 0; i < numCommands; i++) {
+void freeJobs(int index) {
+    for (int i = 0; i < g_jobs[index].numCommands; i++) {
         free(input[i].command);
         if (input[i].numArgs > 0) {
             for (int j = 0; j < input[i].numArgs; j++) {
@@ -288,12 +265,18 @@ void freeCommands() {
             free(input[i].errorRedirectFileName);
             input[i].hasErrorRedirect = false;
         }
+        input[i].hasPipe = false;
         for (int j = 0; input[i].fexec[j] != (char *) NULL; j++) {
             input[i].fexec[j] = (char *) NULL;
         }
     }
+    free(g_jobs[index].fullInput);
+    g_jobs[index].numCommands = 0;
+    g_jobs[index].runOnForeBackground = false;
+    g_jobs[index].runInBackground = false;
+    g_jobs[index].pgid = 1;
+    g_jobs[index].jobNumber = 0;
 }
-
 
 void executeTwoCommands() {
     int pipefd[2];
@@ -301,37 +284,47 @@ void executeTwoCommands() {
     pipe(pipefd);
     pid_ch1 = fork();
     if (pid_ch1 > 0) {
-        jobs[jobsIndex].pid1 = pid_ch1;
-        printf("Child1 pid = %d\n", pid_ch1);
-        currentPgid = pid_ch1;
+        if (DEBUG)
+            printf("Child1 pid = %d\n", pid_ch1);
+        g_currentPgid = pid_ch1;
         // Parent
         pid_ch2 = fork();
         if (pid_ch2 > 0) {
-            jobs[jobsIndex].pid2 = pid_ch2;
-            printf("Child2 pid = %d\n", pid_ch2);
+            if (DEBUG)
+                printf("Child2 pid = %d\n", pid_ch2);
             close(pipefd[0]); //close the pipe in the parent
             close(pipefd[1]);
             int count = 0;
             while (count < 2) {
-                int stat = tcsetpgrp(0, pid_ch1);
-                printf("tcsetpgrp returned: %d\n", stat);
-                pid = waitpid(-1, &status, WUNTRACED | WCONTINUED);
-                if (status == -1)
-                {
-                    // clean up job
+                if (!g_jobs[g_jobsIndex].runInBackground)
+                    pid = waitpid(-1 * pid_ch1, &status, WUNTRACED);
+                else
+                    pid = waitpid(-1 * pid_ch1, &status, WNOHANG);
+                if (status == 3) {
+                    if (DEBUG)
+                        printf("Invalid command");
+                    count++;
                 }
                 if (WIFEXITED(status)) {
-                    printf("child %d exited, status=%d\n", pid, WEXITSTATUS(status));
+                    if (DEBUG)
+                        printf("child %d exited, status=%d\n", pid, WEXITSTATUS(status));
                     count++;
-                } else if (WIFSTOPPED(status)) {
-                    printf("%d stopped by signal %d\n", pid, WSTOPSIG(status));
-                    // PLACE HOLDER
                 } else if (WIFCONTINUED(status)) {
-                    printf("Continuing %d\n", pid);
+                    if (DEBUG)
+                        printf("Continuing %d\n", pid);
                     // PLACE HOLDER
                 }
+                /*else if (WIFSTOPPED(status)) {
+                    if (DEBUG)
+                        printf("%d stopped by signal %d\n", pid, WSTOPSIG(status));
+                    // PLACE HOLDER
+                }*/
             }
-            freeCommands();
+            if (!g_jobs[g_jobsIndex].runInBackground)
+            {
+                freeJobs(g_jobsIndex);
+                g_numJobs--;
+            }
         } else {
             //Child 2
             setpgid(0, pid_ch1); //child2 joins the group whose group id is same as child1's pid
@@ -347,9 +340,8 @@ void executeTwoCommands() {
                 redirectError(1);
             }
             if (execvp(input[1].command, input[1].fexec) == -1) {
-                exit(-1);
+                exit(3);
             }
-
         }
     } else {
         // Child 1
@@ -367,15 +359,16 @@ void executeTwoCommands() {
             redirectError(0);
         }
         if (execvp(input[0].command, input[0].fexec) == -1) {
-            exit(-1);
+            exit(3);
         }
     }
 }
 
 void executeOneCommand() {
-    runningTwoCommands = false;
-    currentProcess = fork();
-    if (currentProcess == 0) {
+    g_jobs[g_jobsIndex].numCommands = 1;
+    int pid = fork();
+    if (pid == 0) {
+        setpgid(0, 0);
         if (input[0].hasInRedirect) {
             redirectInput(0);
         }
@@ -386,56 +379,135 @@ void executeOneCommand() {
             redirectError(0);
         }
         // exit if there's no command found
-        if (execvp(input[0].command, input[0].fexec) == -1)
-        {
-            exit(-1);
+        if (execvp(input[0].command, input[0].fexec) == -1) {
+            exit(3);
         }
     } else {
-        int status = 100;
-        if (!jobs[jobsIndex].runInBackground) {
-            currentProcess = waitpid(-1, &status, WUNTRACED | WCONTINUED);
-            // frees all my strdup'd memory & reinitalizes the input array so it's
-            // ready to take in more input
-            freeCommands();
-        }
+        g_jobs[g_jobsIndex].pgid = pid;
+        int status;
+        if (!g_jobs[g_jobsIndex].runInBackground) {
+            waitpid(pid, &status, WUNTRACED | WCONTINUED);
+            freeJobs(g_jobsIndex);
+            g_numJobs--;
+            if (WIFEXITED(status)) {
+                if (DEBUG)
+                    printf("child %d exited, status=%d\n", pid, WEXITSTATUS(status));
+            } else if (WIFCONTINUED(status)) {
+                if (DEBUG)
+                    printf("Continuing %d\n", pid);
+            } else {
+//            waitpid(pid, &status, WNOHANG);
+            }
         // wait does not take options:
         //    waitpid(-1,&status,0) is same as wait(&status)
         // with no options waitpid wait only for terminated child processes
         // with options we can specify what other changes in the child's status
         // we can respond to. Here we are saying we want to also know if the child
         // has been stopped (WUNTRACED) or continued (WCONTINUED)
-        if (status == -1)
-        {
-            // clean up jobtable
-        }
-        if (WIFEXITED(status)) {
-            printf("child %d exited, status=%d\n", currentProcess, WEXITSTATUS(status));
-        } else if (WIFSTOPPED(status)) {
-            printf("%d stopped by signal %d\n", currentProcess, WSTOPSIG(status));
+
             // PLACE HOLDER
-        } else if (WIFCONTINUED(status)) {
-            printf("Continuing %d\n", currentProcess);
+        }/*else if (WIFSTOPPED(status)) {
+            if (DEBUG)
+                printf("%d stopped by signal %d\n", pid, WSTOPSIG(status));
             // PLACE HOLDER
-        }
+        }*/
     }
 }
 
-void printJobs()
-{
-    int numJobsFinished = 0;
-    for (int i = 0; i < numJobs; i++)
-    {
-        if (jobs[i].jobDone) {
-            printf("[%d]- Done %s", i, jobs[i].fullInput);
-            numJobsFinished++;
-            freeJob(i);
+void printJobs() {
+    int finishedJobs[20];
+    int finishedJobsIdx = 0;
+    for (int i = 0; i < 20; i++)
+        finishedJobs[i] = -1;
+    // Check if any jobs are running or
+    for (int jobsIdx = 0; jobsIdx < g_numJobs; jobsIdx++) {
+        int status;
+        int ret = waitpid(-1 * g_jobs[jobsIdx].pgid, &status, WNOHANG | WUNTRACED);
+        if (ret == 0 && !WIFSTOPPED(status)) {
+            if (g_jobs[jobsIdx].runOnForeBackground)
+                printf("[%d]+ Running %s", g_jobs[jobsIdx].jobNumber, g_jobs[jobsIdx].fullInput);
+            else
+                printf("[%d]- Running %s", g_jobs[jobsIdx].jobNumber, g_jobs[jobsIdx].fullInput);
+        } else if (ret == 0 && WIFSTOPPED(status)) {
+            if (WSTOPSIG(status) == SIGTSTP) {
+                if (g_jobs[jobsIdx].runOnForeBackground)
+                    printf("[%d]+ Stopped %s", g_jobs[jobsIdx].jobNumber, g_jobs[jobsIdx].fullInput);
+                else
+                    printf("[%d]- Stopped %s", g_jobs[jobsIdx].jobNumber, g_jobs[jobsIdx].fullInput);
+            }
+            if (WSTOPSIG(status) == SIGINT) {
+                if (g_jobs[jobsIdx].runOnForeBackground)
+                    printf("[%d]+ Killed %s", g_jobs[jobsIdx].jobNumber, g_jobs[jobsIdx].fullInput);
+                else
+                    printf("[%d]- Killed %s", g_jobs[jobsIdx].jobNumber, g_jobs[jobsIdx].fullInput);
+                finishedJobs[finishedJobsIdx] = jobsIdx;
+                finishedJobsIdx++;
+            }
         }
     }
-    for (int i = 0; i < numJobs; i++)
-    {
-
+    for (int i = 0; i < 20; i++) {
+        if (finishedJobs[i] != -1)
+            freeJobs(i);
     }
-    numJobs -= numJobsFinished;
+
+}
+
+void updateJobs() {
+    int finishedJobs[20];
+    for (int i = 0; i < 20; i++)
+        finishedJobs[i] = -1;
+    int finishedJobsIdx = 0;
+    // Check if any job has finished
+    for (int jobsIdx = 0; jobsIdx < g_numJobs; jobsIdx++) {
+        int status;
+        int ret = waitpid(-1 * g_jobs[jobsIdx].pgid, &status, WNOHANG | WUNTRACED);
+        if (ret == -1)
+            if (DEBUG)
+                printf("waitpid error, errno: %d\n", errno);
+        // ret will be the pid (as it's finished) and WIFSTOPPED will be true
+        // have to use both due to WNOHANG
+        if (ret != 0 && WIFEXITED(status) && ret != -1) {
+            // most recent command
+            if (g_jobs[jobsIdx].runOnForeBackground)
+                printf("[%d]+ Done %s", g_jobs[jobsIdx].jobNumber, g_jobs[jobsIdx].fullInput);
+            else
+                printf("[%d]- Done %s", g_jobs[jobsIdx].jobNumber, g_jobs[jobsIdx].fullInput);
+            finishedJobs[finishedJobsIdx] = jobsIdx;
+            finishedJobsIdx++;
+        }
+    }
+    for (int i = 0; i < 20; i++) {
+        if (finishedJobs[i] != -1)
+            freeJobs(i);
+    }
+    // left shifts all array contents
+    for (int i = 0; i < 20; i++) {
+        // empty pos
+        if (g_jobs[i].pgid == 1) {
+            int nearestFullElement;
+            for (nearestFullElement = i; nearestFullElement < 19; nearestFullElement++) {
+                if (g_jobs[nearestFullElement].pgid != 1)
+                    break;
+            }
+            g_jobs[i] = g_jobs[nearestFullElement];
+            g_jobs[nearestFullElement].pgid = 1;
+        }
+    }
+    // finding the last element
+    int i;
+    for (i = 0; i < 20; i++) {
+        if (g_jobs[i].pgid != 1)
+            break;
+    }
+    // resetting jobs number
+    if (i == 0) {
+        g_jobsNumber = 0;
+        g_numJobs = 0;
+    }
+    else
+        g_numJobs = i+1;
+    g_jobs[i].runOnForeBackground = true;
+    g_jobsIndex = i;
 }
 
 int main() {
@@ -443,25 +515,24 @@ int main() {
     while (1) {
         signal(SIGINT, sigHandler);
         signal(SIGTSTP, sigHandler);
-        signal(SIGCHLD, sigHandler);
         signal(SIGCONT, sigHandler);
-        signal(SIGTTOU, sigHandler);
+        updateJobs();
         inString = readline("# ");
         if (inString == NULL)
             break;
-        parseString(inString);
-        if (strcmp(input[0].command, "bg") == 0)
-            bg();
-        else if (strcmp(input[0].command, "fg") == 0)
-            fg();
-        else if (strcmp(input[0].command, "jobs") == 0)
-            printJobs();
-        else if (input[0].hasPipe)
-        {
-            executeTwoCommands();
-        }
-        else {
-            executeOneCommand();
+        if (strlen(inString) > 0) {
+            parseString(inString);
+            if (strcmp(input[0].command, "bg") == 0)
+                bg();
+            else if (strcmp(input[0].command, "fg") == 0)
+                fg();
+            else if (strcmp(input[0].command, "jobs") == 0)
+                printJobs();
+            else if (input[0].hasPipe) {
+                executeTwoCommands();
+            } else {
+                executeOneCommand();
+            }
         }
     }
 }
