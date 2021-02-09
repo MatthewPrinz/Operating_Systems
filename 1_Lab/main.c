@@ -34,7 +34,7 @@
  * kill - both positive & negative, positive for processes, negative for ctrl c & ctrl z
  *
  */
-#define DEBUG 1
+#define DEBUG false
 // max num g_jobs <= 20
 // & always at the end
 typedef struct Commands {
@@ -142,9 +142,11 @@ void parseString(char *str) {
             recognizeCommand = true;
         } else if (strcmp(token, "&") == 0) {
             g_jobs[g_jobsNext].runInBackground = true;
-        } else if (token[0] == '-' || isalnum(token[0])) {
+        } else {
             // We'll be grabbing the redirection file names in the for loop, so these
             // should just be argv given to the command
+            // Pretty sure this can just be an else as opposed to an else if with
+            /* if (token[0] == '-' || isalnum(token[0])) { */
             if ((numTokens != inRedirectIndex) &&
                 (numTokens != outRedirectIndex) &&
                 (numTokens != errorRedirectIndex)) {
@@ -572,7 +574,8 @@ void printJobs() {
  *
  */
 void updateJobs() {
-    printf("%s:%dUpdating jobs! Running through for loop %d times\n", __FUNCTION__ , __LINE__, g_numJobs);
+    if (DEBUG)
+        printf("%s:%dUpdating jobs! Running through for loop %d times\n", __FUNCTION__ , __LINE__, g_numJobs);
     int finishedJobs[20];
     for (int i = 0; i < 20; i++)
         finishedJobs[i] = -1;
