@@ -1,7 +1,7 @@
 file(REMOVE_RECURSE
   "1_Lab"
   "1_Lab.pdb"
-  "CMakeFiles/1_Lab.dir/main.c.o"
+  "CMakeFiles/1_Lab.dir/yash.c.o"
 )
 
 # Per-language clean rules from dependency scanning.

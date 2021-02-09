@@ -76,7 +76,7 @@
 				</MakeCommands>
 			</Target>
 		</Build>
-		<Unit filename="/home/matt/CLionProjects/Operating_Systems/1_Lab/main.c">
+		<Unit filename="/home/matt/CLionProjects/Operating_Systems/1_Lab/yash.c">
 			<Option target="1_Lab"/>
 		</Unit>
 		<Unit filename="/home/matt/CLionProjects/Operating_Systems/1_Lab/CMakeLists.txt">

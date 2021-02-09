@@ -77,27 +77,27 @@ include CMakeFiles/1_Lab.dir/progress.make
 # Include the compile flags for this target's objects.
 include CMakeFiles/1_Lab.dir/flags.make
 
-CMakeFiles/1_Lab.dir/main.c.o: CMakeFiles/1_Lab.dir/flags.make
-CMakeFiles/1_Lab.dir/main.c.o: ../main.c
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/matt/CLionProjects/Operating_Systems/1_Lab/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building C object CMakeFiles/1_Lab.dir/main.c.o"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -o CMakeFiles/1_Lab.dir/main.c.o   -c /home/matt/CLionProjects/Operating_Systems/1_Lab/main.c
+CMakeFiles/1_Lab.dir/yash.c.o: CMakeFiles/1_Lab.dir/flags.make
+CMakeFiles/1_Lab.dir/yash.c.o: ../yash.c
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/matt/CLionProjects/Operating_Systems/1_Lab/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building C object CMakeFiles/1_Lab.dir/yash.c.o"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -o CMakeFiles/1_Lab.dir/yash.c.o   -c /home/matt/CLionProjects/Operating_Systems/1_Lab/yash.c
 
-CMakeFiles/1_Lab.dir/main.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing C source to CMakeFiles/1_Lab.dir/main.c.i"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /home/matt/CLionProjects/Operating_Systems/1_Lab/main.c > CMakeFiles/1_Lab.dir/main.c.i
+CMakeFiles/1_Lab.dir/yash.c.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing C source to CMakeFiles/1_Lab.dir/yash.c.i"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /home/matt/CLionProjects/Operating_Systems/1_Lab/yash.c > CMakeFiles/1_Lab.dir/yash.c.i
 
-CMakeFiles/1_Lab.dir/main.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling C source to assembly CMakeFiles/1_Lab.dir/main.c.s"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /home/matt/CLionProjects/Operating_Systems/1_Lab/main.c -o CMakeFiles/1_Lab.dir/main.c.s
+CMakeFiles/1_Lab.dir/yash.c.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling C source to assembly CMakeFiles/1_Lab.dir/yash.c.s"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /home/matt/CLionProjects/Operating_Systems/1_Lab/yash.c -o CMakeFiles/1_Lab.dir/yash.c.s
 
 # Object files for target 1_Lab
 1_Lab_OBJECTS = \
-"CMakeFiles/1_Lab.dir/main.c.o"
+"CMakeFiles/1_Lab.dir/yash.c.o"
 
 # External object files for target 1_Lab
 1_Lab_EXTERNAL_OBJECTS =
 
-1_Lab: CMakeFiles/1_Lab.dir/main.c.o
+1_Lab: CMakeFiles/1_Lab.dir/yash.c.o
 1_Lab: CMakeFiles/1_Lab.dir/build.make
 1_Lab: /lib/x86_64-linux-gnu/libreadline.so.8.0
 1_Lab: CMakeFiles/1_Lab.dir/link.txt

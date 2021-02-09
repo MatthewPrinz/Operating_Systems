@@ -6,7 +6,7 @@
 
 #IncludeRegexTransform: 
 
-/home/matt/CLionProjects/Operating_Systems/1_Lab/main.c
+/home/matt/CLionProjects/Operating_Systems/1_Lab/yash.c
 stdio.h
 -
 readline/readline.h
@@ -20,10 +20,6 @@ sys/wait.h
 stdlib.h
 -
 string.h
--
-sys/types.h
--
-sys/stat.h
 -
 fcntl.h
 -

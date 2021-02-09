@@ -143,32 +143,32 @@ depend:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/1_Lab.dir/build.make CMakeFiles/1_Lab.dir/build
 .PHONY : 1_Lab/fast
 
-main.o: main.c.o
+yash.o: yash.c.o
 
-.PHONY : main.o
+.PHONY : yash.o
 
 # target to build an object file
-main.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/1_Lab.dir/build.make CMakeFiles/1_Lab.dir/main.c.o
-.PHONY : main.c.o
+yash.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/1_Lab.dir/build.make CMakeFiles/1_Lab.dir/yash.c.o
+.PHONY : yash.c.o
 
-main.i: main.c.i
+yash.i: yash.c.i
 
-.PHONY : main.i
+.PHONY : yash.i
 
 # target to preprocess a source file
-main.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/1_Lab.dir/build.make CMakeFiles/1_Lab.dir/main.c.i
-.PHONY : main.c.i
+yash.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/1_Lab.dir/build.make CMakeFiles/1_Lab.dir/yash.c.i
+.PHONY : yash.c.i
 
-main.s: main.c.s
+yash.s: yash.c.s
 
-.PHONY : main.s
+.PHONY : yash.s
 
 # target to generate assembly for a file
-main.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/1_Lab.dir/build.make CMakeFiles/1_Lab.dir/main.c.s
-.PHONY : main.c.s
+yash.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/1_Lab.dir/build.make CMakeFiles/1_Lab.dir/yash.c.s
+.PHONY : yash.c.s
 
 # Help Target
 help:
@@ -179,9 +179,9 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... 1_Lab"
-	@echo "... main.o"
-	@echo "... main.i"
-	@echo "... main.s"
+	@echo "... yash.o"
+	@echo "... yash.i"
+	@echo "... yash.s"
 .PHONY : help
 
 
