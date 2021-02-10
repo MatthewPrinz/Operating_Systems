@@ -92,7 +92,8 @@ void parseString(char *str) {
     // ran by the shell.
     bool recognizeCommand = true;
     // Used to show the location of the file name in tokenizedCommand
-    int inRedirectIndex, outRedirectIndex, errorRedirectIndex;
+    int inRedirectIndices[2], outRedirectIndices[2], errorRedirectIndices[2];
+    int inRedirectIndex = 0, outRedirectIndex = 0, errorRedirectIndex = 0;
     int argvIndex = 0;
 
     while ((token = strtok_r(cl_copy, " ", &save_ptr))) {
@@ -102,13 +103,13 @@ void parseString(char *str) {
             recognizeCommand = false;
         } else if (strcmp(token, ">") == 0) {
             input[cmdIndex].hasOutRedirect = true;
-            outRedirectIndex = numTokens + 1;
+            outRedirectIndices[outRedirectIndex++] = numTokens + 1;
         } else if (strcmp(token, "<") == 0) {
             input[cmdIndex].hasInRedirect = true;
-            inRedirectIndex = numTokens + 1;
+            inRedirectIndices[inRedirectIndex++] = numTokens + 1;
         } else if (strcmp(token, "2>") == 0) {
             input[cmdIndex].hasErrorRedirect = true;
-            errorRedirectIndex = numTokens + 1;
+            errorRedirectIndices[errorRedirectIndex++] = numTokens + 1;
         } else if (strcmp(token, "|") == 0) {
             input[cmdIndex].hasPipe = true;
             cmdIndex++;
@@ -121,11 +122,12 @@ void parseString(char *str) {
         } else {
             // We'll be grabbing the redirection file names in the for loop, so these
             // should just be argv given to the command
-            // Pretty sure this can just be an else as opposed to an else if with
-            /* if (token[0] == '-' || isalnum(token[0])) { */
-            if ((numTokens != inRedirectIndex) &&
-                (numTokens != outRedirectIndex) &&
-                (numTokens != errorRedirectIndex)) {
+            if ((numTokens != inRedirectIndices[0]) &&
+                (numTokens != outRedirectIndices[0]) &&
+                (numTokens != errorRedirectIndices[0]) &&
+                (numTokens != inRedirectIndices[1]) &&
+                (numTokens != outRedirectIndices[1]) &&
+                (numTokens != errorRedirectIndices[1])) {
                 input[cmdIndex].argv[argvIndex] = strdup(token);
                 input[cmdIndex].numArgs++;
                 argvIndex++;
@@ -136,13 +138,13 @@ void parseString(char *str) {
     }
     for (int i = 0; i < g_jobs[g_jobsNext].numCommands; i++) {
         if (input[i].hasOutRedirect) {
-            input[i].outRedirectFileName = strdup(tokenizedCommand[outRedirectIndex]);
+            input[i].outRedirectFileName = strdup(tokenizedCommand[outRedirectIndices[i]]);
         }
         if (input[i].hasInRedirect) {
-            input[i].inRedirectFileName = strdup(tokenizedCommand[inRedirectIndex]);
+            input[i].inRedirectFileName = strdup(tokenizedCommand[inRedirectIndices[i]]);
         }
         if (input[i].hasErrorRedirect) {
-            input[i].errorRedirectFileName = strdup(tokenizedCommand[errorRedirectIndex]);
+            input[i].errorRedirectFileName = strdup(tokenizedCommand[errorRedirectIndices[i]]);
         }
         input[i].fexec[0] = input[i].command;
         int j;
@@ -177,7 +179,12 @@ void redirectOutput(int inputIndex) {
                __FUNCTION__, __LINE__, g_jobs[g_jobsCurrent].commands[inputIndex].outRedirectFileName,
                inputIndex, g_jobs[g_jobsCurrent].commands[inputIndex].command);
     int fd = creat(g_jobs[g_jobsCurrent].commands[inputIndex].outRedirectFileName, 0644);
-    dup2(fd, STDOUT_FILENO);
+    if (fd != -1) {
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+    }
+    else
+        exit(3);
 }
 
 /**
@@ -191,7 +198,12 @@ void redirectInput(int inputIndex) {
         printf("%s:%d Redirecting input to file at %s, using commands[%d] - command: %s fd = %d, errno: %d\n",
                __FUNCTION__, __LINE__, g_jobs[g_jobsCurrent].commands[inputIndex].inRedirectFileName,
                inputIndex, g_jobs[g_jobsCurrent].commands[inputIndex].command, fd, errno);
-    dup2(fd, STDIN_FILENO);
+    if (fd != -1) {
+        dup2(fd, STDIN_FILENO);
+        close(fd);
+    }
+    else
+        exit(3);
 }
 /**
  * For dealing with "2>"
@@ -203,7 +215,12 @@ void redirectError(int inputIndex) {
                __FUNCTION__, __LINE__, g_jobs[g_jobsCurrent].commands[inputIndex].errorRedirectFileName,
                inputIndex, g_jobs[g_jobsCurrent].commands[inputIndex].command);
     int fd = creat(g_jobs[g_jobsCurrent].commands[inputIndex].errorRedirectFileName, 0644);
-    dup2(fd, STDERR_FILENO);
+    if (fd != -1) {
+        dup2(fd, STDERR_FILENO);
+        close(fd);
+    }
+    else
+        exit(3);
 }
 
 void sigHandler(int signum) {
@@ -608,7 +625,7 @@ void updateJobs() {
     }
     // free jobs that ran in the background
     freeJobs(finishedJobs);
-    
+
     // assign runOnForeBackground here
     // note that g_jobsCurrent should be correctly set by this point (either by freeJobs or was already correct)
     for (int i = 0; i < 20; i++) {
