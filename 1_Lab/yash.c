@@ -202,8 +202,12 @@ void redirectInput(int inputIndex) {
         dup2(fd, STDIN_FILENO);
         close(fd);
     }
-    else
+    else {
+        if (errno == ENOENT)
+            printf("bash: %s: No such file or directory\n",
+                   g_jobs[g_jobsCurrent].commands[inputIndex].inRedirectFileName);
         exit(3);
+    }
 }
 /**
  * For dealing with "2>"
