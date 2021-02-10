@@ -1,2 +1,2 @@
 all:
-    gcc -o yash -lreadline -o yash.c
+	gcc yash.c -lreadline -o yash
