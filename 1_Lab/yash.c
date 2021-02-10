@@ -71,8 +71,6 @@ void printJobs();
 
 void freeJobs(const int* array);
 
-//TODO probably need to poll status / return value of fg to see if fg should call freeJobs
-// bg maybe? not quite sure
 void bg();
 
 void fg();
@@ -158,14 +156,6 @@ void parseString(char *str) {
     // only viable for the first run -
     if (g_jobsNext == 0)
         g_jobs[g_jobsNext].runOnForeBackground = true;
-    else
-    {
-        for (int i = 0; i < 20; i++)
-        {
-            g_jobs[i].runOnForeBackground = false;
-        }
-        g_jobs[g_jobsNext].runOnForeBackground = true;
-    }
     g_jobs[g_jobsNext].jobNumber = ++g_jobsNumber;
     for (int i = 0; i < g_jobs[g_jobsNext].numCommands; i++) {
         g_jobs[g_jobsNext].commands[i] = input[i];
@@ -195,11 +185,12 @@ void redirectOutput(int inputIndex) {
  * @param inputIndex the command to assign the redirection to
  */
 void redirectInput(int inputIndex) {
-    if (DEBUG)
-        printf("%s:%d Redirecting input to file at %s, using commands[%d] - command: %s\n",
-               __FUNCTION__, __LINE__, g_jobs[g_jobsCurrent].commands[inputIndex].inRedirectFileName,
-               inputIndex, g_jobs[g_jobsCurrent].commands[inputIndex].command);
+
     int fd = open(g_jobs[g_jobsCurrent].commands[inputIndex].inRedirectFileName, O_RDONLY);
+    if (DEBUG)
+        printf("%s:%d Redirecting input to file at %s, using commands[%d] - command: %s fd = %d, errno: %d\n",
+               __FUNCTION__, __LINE__, g_jobs[g_jobsCurrent].commands[inputIndex].inRedirectFileName,
+               inputIndex, g_jobs[g_jobsCurrent].commands[inputIndex].command, fd, errno);
     dup2(fd, STDIN_FILENO);
 }
 /**
@@ -236,9 +227,10 @@ void sigHandler(int signum) {
             if (DEBUG)
                 printf("%s:%d - Received sig int", __FUNCTION__, __LINE__);
             if (g_currentPgid != 0 && g_jobs[g_jobsCurrent].runInBackground == false) {
+                g_jobs[g_jobsCurrent].interrupted = true;
+                kill((-1*g_currentPgid), SIGINT);
                 if (DEBUG)
                     printf(" Sending it to g_currentPgid=%d\n", g_currentPgid);
-                g_jobs[g_jobsCurrent].interrupted = true;
             }
             break;
         default:
@@ -257,6 +249,9 @@ void fg() {
             g_currentPgid = g_jobs[jobsIdx].pgid;
             g_jobs[jobsIdx].tstopped = false;
             g_jobs[jobsIdx].runInBackground = false;
+            // removing ampersand if included
+            if (g_jobs[jobsIdx].fullInput[strlen(g_jobs[jobsIdx].fullInput)-1] == '&')
+                g_jobs[jobsIdx].fullInput[strlen(g_jobs[jobsIdx].fullInput)-1] = '\0';
             printf("%s\n", g_jobs[jobsIdx].fullInput);
             kill(-1 * (g_jobs[jobsIdx].pgid), SIGCONT);
             break;
@@ -289,6 +284,8 @@ void bg() {
             g_jobs[jobsIdx].tstopped = false;
             g_currentPgid = g_jobs[jobsIdx].pgid;
             g_jobs[jobsIdx].runInBackground = true;
+            // appending ampersand
+            strcat(g_jobs[jobsIdx].fullInput, " &");
             printf("[%d]+ %s\n", g_jobs[jobsIdx].jobNumber, g_jobs[jobsIdx].fullInput);
             kill(-1 * (g_jobs[jobsIdx].pgid), SIGCONT);
             break;
@@ -471,6 +468,7 @@ void freeJobs(const int* arr) {
             g_jobs[arr[arrInd]].jobNumber = 0;
             g_jobs[arr[arrInd]].interrupted = false;
             g_jobs[arr[arrInd]].tstopped = false;
+            g_jobs[arr[arrInd]].completed = false;
         }
     }
     leftShiftJobs();
@@ -525,7 +523,6 @@ void leftShiftJobs() {
         g_jobsNumber = maxJobNumber;
         g_jobsNext = jobsIdx;
         g_jobsCurrent = jobsIdx - 1;
-        g_jobs[g_jobsCurrent].runOnForeBackground = true;
         if (DEBUG)
             printf("%s:%d g_jobsNext=%d, g_jobsCurrent=%d, g_jobsNumber=%d\n",
                    __FUNCTION__ , __LINE__, g_jobsNext, g_jobsCurrent, g_jobsNumber);
@@ -556,10 +553,6 @@ void printJobs() {
                 else
                     printf("[%d]- Stopped %s\n", g_jobs[jobsIdx].jobNumber, g_jobs[jobsIdx].fullInput);
             } else if (g_jobs[jobsIdx].interrupted == true) {
-                if (g_jobs[jobsIdx].runOnForeBackground)
-                    printf("[%d]+ Interrupt %s\n", g_jobs[jobsIdx].jobNumber, g_jobs[jobsIdx].fullInput);
-                else
-                    printf("[%d]- Interrupt %s\n", g_jobs[jobsIdx].jobNumber, g_jobs[jobsIdx].fullInput);
                 interruptedJobs[interruptedJobsIdx] = jobsIdx;
                 interruptedJobsIdx++;
             } else if (g_jobs[jobsIdx].completed != true) {
@@ -607,12 +600,23 @@ void updateJobs() {
                     printf("[%d]+ Done %s\n", g_jobs[jobsIdx].jobNumber, g_jobs[jobsIdx].fullInput);
                 else
                     printf("[%d]- Done %s\n", g_jobs[jobsIdx].jobNumber, g_jobs[jobsIdx].fullInput);
+                g_jobs[jobsIdx].completed = true;
                 finishedJobs[finishedJobsIdx] = jobsIdx;
                 finishedJobsIdx++;
             }
         }
     }
+    // free jobs that ran in the background
     freeJobs(finishedJobs);
+    
+    // assign runOnForeBackground here
+    // note that g_jobsCurrent should be correctly set by this point (either by freeJobs or was already correct)
+    for (int i = 0; i < 20; i++) {
+        g_jobs[i].runOnForeBackground = false;
+    }
+    g_jobs[g_jobsCurrent].runOnForeBackground = true;
+
+
 }
 
 int main() {
@@ -633,7 +637,10 @@ int main() {
             else if (strcmp(inString, "fg") == 0)
                 fg();
             else if (strcmp(inString, "jobs") == 0)
+            {
+                updateJobs();
                 printJobs();
+            }
             else {
                 parseString(inString);
                 if (DEBUG)
